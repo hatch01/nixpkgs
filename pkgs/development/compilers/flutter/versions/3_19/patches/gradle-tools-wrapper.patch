@@ -1,0 +1,28 @@
+Adds an intermediate gradle build to change flutter_tools' gradle project from
+creating `build` and `.gradle` directories in the nix store.
+This patch moves them to "$HOME/.cache/flutter/nix-flutter-tools-gradle/$engineShortRev"
+diff --git a/packages/flutter_tools/gradle/settings.gradle b/packages/flutter_tools/gradle/settings.gradle
+new file mode 100644
+index 0000000000..b2485c94b4
+--- /dev/null
++++ b/packages/flutter_tools/gradle/settings.gradle
+@@ -0,0 +1,19 @@
++rootProject.buildFileName = "/dev/null"
++
++def engineShortRev = (new File("$settingsDir/../../../bin/internal/engine.version")).text.take(10)
++def dir = new File("$System.env.HOME/.cache/flutter/nix-flutter-tools-gradle/$engineShortRev")
++dir.mkdirs()
++def file = new File(dir, "settings.gradle")
++
++file.text = """
++rootProject.projectDir = new File("$settingsDir")
++apply from: new File("$settingsDir/settings.gradle.kts")
++
++gradle.allprojects { project ->
++  project.beforeEvaluate {
++    project.layout.buildDirectory = new File("$dir/build")
++  }
++}
++"""
++
++includeBuild(dir)
