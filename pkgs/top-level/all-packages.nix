@@ -29736,6 +29736,8 @@ with pkgs;
   electrum-grs = libsForQt5.callPackage ../applications/misc/electrum/grs.nix { };
 
   electrum-ltc = libsForQt5.callPackage ../applications/misc/electrum/ltc.nix { };
+  
+  electrum-satoship = libsForQt5.callPackage ../applications/misc/electrum/satoship.nix { };
 
   elf-dissector = libsForQt5.callPackage ../applications/misc/elf-dissector { };
 
