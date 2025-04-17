@@ -15,6 +15,11 @@
   qmqtt,
   xz,
   sdbus-cpp_2,
+  plutovg,
+  lunasvg,
+  nanopb,
+  linalg,
+  stb,
 }:
 
 let
@@ -32,8 +37,6 @@ stdenv.mkDerivation rec {
     repo = "HyperHDR";
     tag = "v${version}";
     hash = "sha256-S4in3fVjbkPfQe7ubuoUJ6AKha2luSjZPFS55aSo2jU=";
-    fetchSubmodules = true;
-    deepClone = true;
   };
 
   nativeBuildInputs = [
@@ -43,12 +46,12 @@ stdenv.mkDerivation rec {
   ];
 
   patches = [
-    # https://github.com/awawa-dev/HyperHDR/pull/1140
-    # This can be removed on next release
+    # Allow completly unvendoring hyperhdr
+    # This can be removed on the next hyperhdr release
     (fetchpatch {
-      name = "USE_SYSTEM_SDBUS_CPP_LIBS";
-      url = "https://github.com/awawa-dev/HyperHDR/pull/1140.patch";
-      hash = "sha256-Fuog++K3qaDeC/HymLPl5RF0yolNFL891EY4f36ILwE=";
+      name = "USE_SYSTEM_LIBS";
+      url = "https://github.com/awawa-dev/HyperHDR/pull/1161.patch";
+      hash = "sha256-a50RNbbhi40vigGLn1IBy7m5FKET6bbPNhLsoLE+ReI=";
     })
   ];
 
@@ -58,6 +61,9 @@ stdenv.mkDerivation rec {
     (cmakeBool "USE_SYSTEM_MQTT_LIBS" true)
     (cmakeBool "USE_SYSTEM_FLATBUFFERS_LIBS" true)
     (cmakeBool "USE_SYSTEM_MBEDTLS_LIBS" true)
+    (cmakeBool "USE_SYSTEM_NANOPB_LIBS" true)
+    (cmakeBool "USE_SYSTEM_LUNASVG_LIBS" true)
+    (cmakeBool "USE_SYSTEM_STB_LIBS" true)
   ];
 
   buildInputs = [
@@ -72,6 +78,11 @@ stdenv.mkDerivation rec {
     qt6Packages.qtserialport
     xz
     sdbus-cpp_2
+    lunasvg
+    plutovg
+    nanopb
+    linalg
+    stb
   ];
 
   meta = with lib; {
