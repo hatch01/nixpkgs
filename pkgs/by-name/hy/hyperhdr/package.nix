@@ -55,6 +55,11 @@ stdenv.mkDerivation rec {
     })
   ];
 
+  postPatch = ''
+    substituteInPlace sources/sound-capture/linux/SoundCaptureLinux.cpp \
+      --replace "libasound.so.2" "${alsa-lib}/lib/libasound.so.2"
+  '';
+
   cmakeFlags = [
     "-DPLATFORM=linux"
     (cmakeBool "USE_SYSTEM_SDBUS_CPP_LIBS" true)
