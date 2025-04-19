@@ -55,10 +55,9 @@ stdenv.mkDerivation rec {
     })
   ];
 
-  postPatch = ''
-    substituteInPlace sources/sound-capture/linux/SoundCaptureLinux.cpp \
-      --replace "libasound.so.2" "${alsa-lib}/lib/libasound.so.2"
-  '';
+  env = {
+    NIX_LDFLAGS = "-rpath ${lib.makeLibraryPath [ alsa-lib ]}";
+  };
 
   cmakeFlags = [
     "-DPLATFORM=linux"
