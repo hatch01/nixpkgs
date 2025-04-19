@@ -6,7 +6,6 @@
   mpfr,
   libmpc,
 }:
-
 rustPlatform.buildRustPackage rec {
   pname = "kalker";
   version = "2.2.1";
@@ -19,7 +18,13 @@ rustPlatform.buildRustPackage rec {
   };
 
   useFetchCargoVendor = true;
-  cargoHash = "sha256-IYxgh6ni3BFnocHGKwKUqgSC2xUjn0b/4pBqRC5iY8U=";
+  cargoHash = "sha256-LEP2ebthwtpPSRmJt0BW/T/lB6EE+tylyVv+PDt8UoQ=";
+
+  cargoPatches = [
+    # Fixes build issue by just running cargo update
+    # Can be removed when https://github.com/PaddiM8/kalker/pull/167 is merged and a new release is published
+    ./bump_cargo_deps.patch
+  ];
 
   buildInputs = [
     gmp
