@@ -44,7 +44,19 @@ in
     };
 
     environment = lib.mkOption {
-      type = lib.types.attrsOf lib.types.str;
+      type = lib.types.submodule {
+        freeformType = lib.types.attrsOf lib.types.str;
+        options = {
+          SKIP_SYSTEMD = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Whether to disable systemd service monitoring.
+              Enabling this option will skip systemd tracking and its setup in NixOS.
+            '';
+          };
+        };
+      };
       default = { };
       description = ''
         Environment variables for configuring the beszel-agent service.
@@ -70,6 +82,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    services.dbus.implementation = "broker";
+
     services.udev.extraRules = lib.optionalString cfg.smartmon.enable ''
       # Change NVMe devices to disk group ownership for S.M.A.R.T. monitoring
       KERNEL=="nvme[0-9]*", GROUP="disk", MODE="0660"
@@ -82,7 +96,10 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
 
-      environment = cfg.environment;
+      environment = lib.mapAttrs (
+        _: value: if lib.isBool value then (lib.boolToString value) else value
+      ) cfg.environment;
+
       path =
         cfg.extraPath
         ++ lib.optionals cfg.smartmon.enable [ cfg.smartmon.package ]
@@ -103,9 +120,11 @@ in
 
         EnvironmentFile = cfg.environmentFile;
 
-        # adds ability to monitor docker/podman containers
+        # Adds ability to monitor docker/podman containers and systemd services.
+        # messagebus group is required for D-Bus system bus access to query systemd.
         SupplementaryGroups =
-          lib.optionals config.virtualisation.docker.enable [ "docker" ]
+          lib.optionals (!cfg.environment.SKIP_SYSTEMD) [ "messagebus" ]
+          ++ lib.optionals config.virtualisation.docker.enable [ "docker" ]
           ++ lib.optionals (
             config.virtualisation.podman.enable && config.virtualisation.podman.dockerSocket.enable
           ) [ "podman" ]
