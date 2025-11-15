@@ -19,6 +19,15 @@ in
     openFirewall = (lib.mkEnableOption "") // {
       description = "Whether to open the firewall port (default 45876).";
     };
+    smartmon = {
+      enable = lib.mkOption {
+        default = true;
+        example = false;
+        description = "Include services.beszel.agent.smartmon.package in the Beszel agent path for disk monitoring and add the agent to the disk group.";
+        type = lib.types.bool;
+      };
+      package = lib.mkPackageOption pkgs "smartmontools" { };
+    };
 
     environment = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
@@ -44,9 +53,37 @@ in
         Extra packages to add to beszel path (such as nvidia-smi or rocm-smi).
       '';
     };
+    deviceAllow = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [
+        "/dev/sda"
+        "/dev/sdb"
+        "/dev/nvme0"
+      ];
+      description = ''
+        List of device paths to allow access to for SMART monitoring.
+        This is only needed if the ambient capabilities are not sufficient.
+        Devices will be granted read-only access.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
+    # Static user required for D-Bus authentication and systemd monitoring.
+    # DynamicUser does not work reliably with D-Bus peer credential verification.
+    users.users.beszel-agent = {
+      isSystemUser = true;
+      group = "beszel-agent";
+    };
+
+    users.groups.beszel-agent = { };
+
+    services.udev.extraRules = lib.optionalString cfg.smartmon.enable ''
+      # Change NVMe devices to disk group ownership for S.M.A.R.T. monitoring
+      KERNEL=="nvme[0-9]*", GROUP="disk", MODE="0660"
+    '';
+
     systemd.services.beszel-agent = {
       description = "Beszel Server Monitoring Agent";
 
@@ -57,6 +94,7 @@ in
       environment = cfg.environment;
       path =
         cfg.extraPath
+        ++ lib.optionals cfg.smartmon.enable [ cfg.smartmon.package ]
         ++ lib.optionals (builtins.elem "nvidia" config.services.xserver.videoDrivers) [
           (lib.getBin config.hardware.nvidia.package)
         ]
@@ -74,19 +112,40 @@ in
 
         EnvironmentFile = cfg.environmentFile;
 
-        # adds ability to monitor docker/podman containers
+        # Adds ability to monitor docker/podman containers and systemd services.
+        # messagebus group is required for D-Bus system bus access to query systemd.
         SupplementaryGroups =
           lib.optionals config.virtualisation.docker.enable [ "docker" ]
           ++ lib.optionals (
             config.virtualisation.podman.enable && config.virtualisation.podman.dockerSocket.enable
-          ) [ "podman" ];
+          ) [ "podman" ]
+          ++ [ "messagebus" ]
+          ++ lib.optionals cfg.smartmon.enable [ "disk" ];
 
-        DynamicUser = true;
+        DynamicUser = false;
         User = "beszel-agent";
+        Group = "beszel-agent";
+
+        # Capabilities needed for SMART monitoring
+        AmbientCapabilities = lib.mkIf cfg.smartmon.enable [
+          "CAP_SYS_RAWIO"
+          "CAP_SYS_ADMIN"
+        ];
+        CapabilityBoundingSet = lib.mkIf cfg.smartmon.enable [
+          "CAP_SYS_RAWIO"
+          "CAP_SYS_ADMIN"
+        ];
+
+        # Device access for SMART monitoring
+        DeviceAllow = lib.mkIf (cfg.smartmon.enable && cfg.deviceAllow != [ ]) (
+          map (device: "${device} r") cfg.deviceAllow
+        );
+
         LockPersonality = true;
-        NoNewPrivileges = true;
+        NoNewPrivileges = !cfg.smartmon.enable;
+        PrivateDevices = lib.mkForce false;
         PrivateTmp = true;
-        PrivateUsers = true;
+        PrivateUsers = !cfg.smartmon.enable;
         ProtectClock = true;
         ProtectControlGroups = "strict";
         ProtectHome = "read-only";
