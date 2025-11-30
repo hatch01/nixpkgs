@@ -167,7 +167,7 @@ stdenv.mkDerivation (finalAttrs: {
   configureFlags = [
     "--enable-prefix-only=yes"
     "--disable-pcp" # TODO: figure out how to package its dependency
-    "--with-default-session-path=/run/wrappers/bin:/run/current-system/sw/bin"
+    "--with-default-session-path=${placeholder "out"}/bin:/etc/cockpit/path:/run/wrappers/bin:/run/current-system/sw/bin"
     "--with-admin-group=root" # TODO: really? Maybe "wheel"?
   ];
 
@@ -191,7 +191,8 @@ stdenv.mkDerivation (finalAttrs: {
     for binary in $out/bin/cockpit-bridge $out/libexec/cockpit-askpass; do
       chmod +x $binary
       wrapProgram $binary \
-        --prefix PYTHONPATH : $out/${python3Packages.python.sitePackages}
+        --prefix PYTHONPATH : $out/${python3Packages.python.sitePackages} \
+        --prefix XDG_DATA_DIRS : /etc/cockpit/share # Cockpit apps will be stored at /etc/cockpit/share/cockpit/ (managed by Cockpit nixos service)
     done
 
     patchShebangs $out/share/cockpit/issue/update-issue
