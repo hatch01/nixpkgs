@@ -28,9 +28,7 @@ let
     name = "cockpit-plugins-env";
     paths = lib.concatMap (p: p.passthru.cockpitPath or [ ]) pathPkgs;
     pathsToLink = [
-      "/bin"
       "/share"
-      "/lib"
     ];
   };
 
