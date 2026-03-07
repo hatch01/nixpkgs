@@ -288,7 +288,16 @@ with pkgs;
     name = "update-autotools-gnu-config-scripts-hook";
     substitutions = {
       gnu_config = gnu-config.override {
-        runtimeShell = targetPackages.stdenv.shell;
+        # targetPackages.stdenv.shell exists when targetPackages is a full package
+        # set (i.e. pkgs == targetPackages, not the __raw stub used in cross builds).
+        # In a cross build targetPackages is a minimal stub whose stdenv only has
+        # `cc`, so we fall back to stdenv.shell (the build-platform shell, a fixed
+        # string baked in at stage-construction time).  We deliberately avoid using
+        # `runtimeShell` / `targetPackages.runtimeShell` here because those are lazy
+        # thunks that force bashNonInteractive.outPath, which in turn pulls in
+        # updateAutotoolsGnuConfigScriptsHook via nativeBuildInputs → infinite
+        # recursion.
+        runtimeShell = targetPackages.stdenv.shell or stdenv.shell;
       };
     };
   } ../build-support/setup-hooks/update-autotools-gnu-config-scripts.sh;
