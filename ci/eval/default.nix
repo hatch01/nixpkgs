@@ -92,6 +92,8 @@ let
       evalSystem ? builtins.currentSystem,
       # The path to the `paths.json` file from `attrpathsSuperset`
       attrpathFile ? "${attrpathsSuperset { inherit evalSystem; }}/paths.json",
+      # Optional attribute set under pkgs to evaluate (e.g. pkgsCross.aarch64-multiplatform)
+      evalSet ? null,
     }:
     let
       singleChunk = writeShellScript "single-chunk" ''
@@ -124,6 +126,7 @@ let
           --arg attrpathFile "${attrpathFile}" \
           --arg systems "[ \"$system\" ]" \
           --arg includeBroken ${lib.boolToString includeBroken} \
+          ${lib.optionalString (evalSet != null) "--argstr evalSet ${lib.escapeShellArg evalSet} \\"}
           --argstr extraNixpkgsConfigJson ${lib.escapeShellArg (builtins.toJSON extraNixpkgsConfig)} \
           -I ${nixpkgs} \
           -I ${attrpathFile} \

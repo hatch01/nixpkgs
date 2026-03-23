@@ -9,6 +9,7 @@
   includeBroken,
   systems,
   extraNixpkgsConfigJson,
+  evalSet ? null,
 }:
 
 let
@@ -17,7 +18,7 @@ let
 
   unfiltered = import ./outpaths.nix {
     inherit path;
-    inherit includeBroken systems;
+    inherit includeBroken systems evalSet;
     extraNixpkgsConfig = builtins.fromJSON extraNixpkgsConfigJson;
   };
 

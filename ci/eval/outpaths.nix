@@ -16,11 +16,14 @@
 
   # Customize the config used to evaluate nixpkgs
   extraNixpkgsConfig ? { },
+
+  # Optional attribute set under pkgs to evaluate (e.g. "pkgsCross.aarch64-multiplatform")
+  evalSet ? null,
 }:
 let
   lib = import (path + "/lib");
 
-  nixpkgsJobs =
+  releaseJobs =
     import (path + "/pkgs/top-level/release.nix")
       # Compromise: accuracy vs. resources needed for evaluation.
       {
@@ -70,6 +73,12 @@ let
         };
       };
 
+  nixpkgsJobs =
+    if evalSet == null then
+      releaseJobs
+    else
+      lib.attrByPath (lib.splitString "." evalSet) (throw "Invalid evalSet: ${evalSet}") releaseJobs;
+
   nixosJobs = import (path + "/nixos/release.nix") {
     inherit attrNamesOnly;
     supportedSystems = lib.filter (lib.hasSuffix "-linux") (
@@ -105,9 +114,12 @@ let
   ];
 
 in
-tweak (
-  (removeAttrs nixpkgsJobs blacklist)
-  // {
-    nixosTests = lib.filterAttrs (name: _: name == "simple") nixosJobs.tests;
-  }
-)
+if evalSet == null then
+  tweak (
+    (removeAttrs nixpkgsJobs blacklist)
+    // {
+      nixosTests = lib.filterAttrs (name: _: name == "simple") nixosJobs.tests;
+    }
+  )
+else
+  tweak nixpkgsJobs
