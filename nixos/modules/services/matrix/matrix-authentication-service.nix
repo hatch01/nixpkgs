@@ -7,13 +7,18 @@
 
 let
   inherit (lib)
+    concatLists
     concatMapStringsSep
+    concatStringsSep
     filter
     filterAttrs
     getExe
+    hasSuffix
     isAttrs
     isList
+    last
     mapAttrs
+    mapAttrsToList
     mkEnableOption
     mkIf
     mkOption
@@ -33,15 +38,61 @@ let
     else
       o;
 
-  # remove null values from the final configuration
+  # Path to a given credential once loaded by systemd.
+  credentialPath = name: "/run/credentials/matrix-authentication-service.service/${name}";
+
+  # Recursively walk a (pruned) settings tree and collect every leaf whose
+  # attribute name ends in "_file", together with a name derived from its
+  # attribute path (e.g. matrix.secret_file -> "matrix-secret_file") and its
+  # original value (the path to the file on disk).
+  findFileCredentials =
+    path: o:
+    if isAttrs o then
+      concatLists (map (k: findFileCredentials (path ++ [ k ]) o.${k}) (builtins.attrNames o))
+    else if isList o then
+      concatLists (lib.imap0 (i: v: findFileCredentials (path ++ [ (toString i) ]) v) o)
+    else if o != null && path != [ ] && hasSuffix "_file" (last path) then
+      [
+        {
+          name = concatStringsSep "-" path;
+          value = o;
+        }
+      ]
+    else
+      [ ];
+
+  # Recursively walk a (pruned) settings tree and replace the value of every
+  # "_file"-suffixed leaf with the path the systemd credential will be
+  # available at, so the on-disk config file no longer needs to reference the
+  # original (potentially store-readable) file directly.
+  substituteFileCredentials =
+    path: o:
+    if isAttrs o then
+      mapAttrs (k: v: substituteFileCredentials (path ++ [ k ]) v) o
+    else if isList o then
+      lib.imap0 (i: v: substituteFileCredentials (path ++ [ (toString i) ]) v) o
+    else if o != null && path != [ ] && hasSuffix "_file" (last path) then
+      credentialPath (concatStringsSep "-" path)
+    else
+      o;
+
+  # settings with null values removed, used both as the basis for the final
+  # config file and for discovering which "_file" credentials to load.
+  prunedSettings = filterRecursiveNull cfg.settings;
+
+  fileCredentials = if cfg.enableFileSubstitution then findFileCredentials [ ] prunedSettings else [ ];
+
+  # remove null values from the final configuration, and substitute in
+  # credential paths for "_file" settings if enabled
   finalSettings =
     let
-      pruned = filterRecursiveNull cfg.settings;
+      substituted =
+        if cfg.enableFileSubstitution then substituteFileCredentials [ ] prunedSettings else prunedSettings;
     in
-    if pruned ? upstream_oauth2 && pruned.upstream_oauth2 == { } then
-      removeAttrs pruned [ "upstream_oauth2" ]
+    if substituted ? upstream_oauth2 && substituted.upstream_oauth2 == { } then
+      removeAttrs substituted [ "upstream_oauth2" ]
     else
-      pruned;
+      substituted;
   configFile = format.generate "config.yaml" finalSettings;
 
   extraConfigArgs = lib.imap0 (i: _: "%d/config-${toString i}") cfg.extraConfigFiles;
@@ -67,7 +118,9 @@ in
         [configuration reference](https://element-hq.github.io/matrix-authentication-service/usage/configuration.html)
         for possible values.
 
-        Secrets should be passed in by using the `extraConfigFiles` option.
+        Secrets should be passed in by using the `extraConfigFiles` option,
+        or by setting `enableFileSubstitution` and pointing any `*_file`
+        setting at a secret file outside of the Nix store.
       '';
       type = types.submodule {
         freeformType = format.type;
@@ -337,6 +390,22 @@ in
       };
     };
 
+    enableFileSubstitution = mkEnableOption ''
+      automatic systemd credential loading for settings ending in `_file`.
+
+      When enabled, every leaf attribute in `settings` whose name ends with
+      `_file` (e.g. `matrix.secret_file`, or a `client_secret_file` inside an
+      `upstream_oauth2` provider) is treated as a path to a secret file on
+      disk. That file is loaded as a systemd credential via `LoadCredential`,
+      and the value written into the generated config is rewritten to point
+      at `/run/credentials/matrix-authentication-service.service/<name>`
+      instead of the original path, where `<name>` is the setting's
+      attribute path joined with `-` (e.g. `matrix-secret_file`). This keeps
+      the original secret file path out of the world-readable config file in
+      the Nix store while still letting you reference secrets declaratively
+      in `settings`
+    '';
+
     createDatabase = mkOption {
       type = types.bool;
       default = false;
@@ -407,7 +476,8 @@ in
         DynamicUser = true;
         LoadCredential =
           (lib.imap0 (i: path: "config-${toString i}:${path}") cfg.extraConfigFiles)
-          ++ (lib.mapAttrsToList (name: path: "${name}:${path}") cfg.credentials);
+          ++ (mapAttrsToList (name: path: "${name}:${path}") cfg.credentials)
+          ++ (map (f: "${f.name}:${f.value}") fileCredentials);
         ExecStartPre = pkgs.writeShellScript "mas-prepare" ''
           envsubst -i ${configFile} > /run/matrix-authentication-service/config.yaml
           ${getExe cfg.package} config check --config /run/matrix-authentication-service/config.yaml \
