@@ -2,6 +2,7 @@
   lib,
   buildGoModule,
   fetchFromGitHub,
+  fetchpatch,
   installShellFiles,
   makeWrapper,
   iproute2,
@@ -16,7 +17,7 @@
 
 buildGoModule (finalAttrs: {
   pname = "hydrascale";
-  version = "1.7.0";
+  version = "1.8.0";
 
   __structuredAttrs = true;
   strictDeps = true;
@@ -25,8 +26,20 @@ buildGoModule (finalAttrs: {
     owner = "Crank-Git";
     repo = "Hydrascale";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-RPmuM2EmwAcRsSKooses7z+8gvYnvllnTIb1Jx4ewyo=";
+    hash = "sha256-t92I4zJvnZlgRgxQclSZ4unCLDZFNQ4z70lZDjE0VKg=";
   };
+
+  # seed the namespace overlay resolv.conf and write bare hostnames to /etc/hosts, so
+  # MagicDNS activates and unprefixed names resolve without systemd-resolved
+  # (Crank-Git/Hydrascale#480, fixed by #481); drop when a release includes it
+  patches = [
+    (fetchpatch {
+      name = "hydrascale-seed-resolv-conf-and-bare-hosts.patch";
+      url = "https://github.com/hatch01/Hydrascale/commit/74352256d843b18fce646990251bbedd6c408db6.patch";
+      excludes = [ "docs/*" ];
+      hash = "sha256-ofkRArCZ1GTMyKlo2z3Tr2RCiIJWMjyaFflO0wL6xCo=";
+    })
+  ];
 
   vendorHash = "sha256-eQHU0tkhWIAqVMp9mAsD8Se53QOGdUA9rbk4QdpvpnQ=";
 
